@@ -1,7 +1,7 @@
 //npm packages
 const jwt = require('jsonwebtoken')
 const bcrypt = require('bcryptjs')
-const {validationResult} = require('express-validator')
+const { validationResult } = require('express-validator')
 const dotenv = require('dotenv');
 
 
@@ -23,7 +23,7 @@ module.exports.signUp = async (req, res, next) => {
         return next(err)
     }
 
-    const salt =  bcrypt.genSaltSync();
+    const salt = bcrypt.genSaltSync();
 
     const hashPassword = await bcrypt.hash(req.body.password, salt);
 
@@ -49,7 +49,7 @@ module.exports.signUp = async (req, res, next) => {
         const authToken = [jwt.sign({ userId: userId, profileId: profileId }, process.env.ACCESS_TOKEN_SECRET)];
 
         const validToken = new ValidToken()
-        
+
         await validToken.save(profileId, authToken)
 
         return res.json({
@@ -57,7 +57,8 @@ module.exports.signUp = async (req, res, next) => {
             auth_token: authToken[0],
             verify_token: '123',
             profile_id: profileId
-          });
+        });
+
 
     } catch (err) {
         err.status = 0

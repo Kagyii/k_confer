@@ -1,122 +1,132 @@
 //npm packages
-const { validationResult } = require('express-validator')
+const { validationResult } = require("express-validator");
 
 //aws
-const s3 = require('../aws/s3')
+const s3 = require("../aws/s3");
 
 //models
-const UserAuth = require('../models/user-auth')
-const Profile = require('../models/profile')
-const Follower = require('../models/follower')
-const InterestedField = require('../models/interested-field')
-
+const UserAuth = require("../models/user-auth");
+const Profile = require("../models/profile");
+const Follower = require("../models/follower");
+const InterestedField = require("../models/interested-field");
 
 module.exports.getProfile = async (req, res, next) => {
-    const validationErr = validationResult(req)
+  const validationErr = validationResult(req);
 
-    if (!validationErr.isEmpty()) {
-        let err = new Error(validationErr.errors[0].msg)
-        err.status = 0
-        return next(err)
+  if (!validationErr.isEmpty()) {
+    let err = new Error(validationErr.errors[0].msg);
+    err.status = 0;
+    return next(err);
+  }
+  try {
+    const profile = new Profile();
+
+    let [[getProfileResult]] = await profile.getByPid(req.query.profile_id);
+
+    const follower = new Follower();
+
+    let [[getFollowerCount]] = await follower.getFollowerCount(
+      req.query.profile_id
+    );
+
+    getProfileResult.followerCount = getFollowerCount.followerCount - 1;
+
+    if (req.query.profile_id == req.decodedToken.profileId) {
+      let [[getFollowingCount]] = await follower.getFollowingCount(
+        req.query.profile_id
+      );
+
+      getProfileResult.followingCount = getFollowingCount.followingCount - 1;
+    } else {
+      delete getProfileResult.account_type;
     }
-    try {
-        const profile = new Profile()
 
-        let [[getProfileResult]] = await profile.getByPid(req.query.profile_id)    
-
-        const follower = new Follower()
-
-        let [[getFollowerCount]] = await follower.getFollowerCount(req.query.profile_id)
-
-        getProfileResult.followerCount = getFollowerCount.followerCount - 1
-
-        if(req.query.profile_id == req.decodedToken.profileId){
-            
-            let [[getFollowingCount]] = await follower.getFollowingCount(req.query.profile_id)
-
-            getProfileResult.followingCount = getFollowingCount.followingCount - 1
-        }else{
-            delete getProfileResult.account_type
-        }
-
-        return res.json({
-            status: 1,
-            detail: getProfileResult
-        })
-
-    } catch (err) {
-        err.status = 0
-        return next(err)
-    }
-}
-
+    return res.json({
+      status: 1,
+      detail: getProfileResult,
+    });
+  } catch (err) {
+    err.status = 0;
+    return next(err);
+  }
+};
 
 module.exports.setupProfile = async (req, res, next) => {
+  const validationErr = validationResult(req);
 
-    const validationErr = validationResult(req)
+  if (!validationErr.isEmpty()) {
+    let err = new Error(validationErr.errors[0].msg);
+    err.status = 0;
+    return next(err);
+  }
 
-    if (!validationErr.isEmpty()) {
-        let err = new Error(validationErr.errors[0].msg)
-        err.status = 0
-        return next(err)
-    }
+  let work = req.body.work || null;
 
-    let work = req.body.work || null
+  let workplace = req.body.workplace || null;
 
-    let workplace = req.body.workplace || null
+  let speciality = req.body.speciality || null;
 
-    let speciality = req.body.speciality || null
+  let hometown = req.body.hometown || null;
 
-    let hometown = req.body.hometown || null
+  let interestedFields = req.body.interestedFields;
 
-    let interestedFields = req.body.interestedFields
+  let userInterestedFields = [];
 
-    let userInterestedFields = []
+  const profilePictureBucket = "k-confer-profile-picture";
 
-    const profilePictureBucket = 'k-confer-profile-picture'
+  interestedFields.forEach((i) => {
+    userInterestedFields.push([req.decodedToken.profileId, i]);
+  });
 
-    interestedFields.forEach( i =>{
-        userInterestedFields.push([req.decodedToken.profileId, i])
-    })
+  try {
+    let [s3PpPath] = await s3.uploadImage(req.body.image, profilePictureBucket);
 
+    const profile = new Profile();
 
-    try {
+    await profile.setup(
+      req.body.university,
+      hometown,
+      speciality,
+      work,
+      workplace,
+      s3PpPath,
+      req.body.studentYear,
+      req.decodedToken.profileId
+    );
 
-        let [s3PpPath] = await s3.uploadImage(req.body.image, profilePictureBucket)
+    const user = new UserAuth();
 
-        const profile = new Profile()
+    await user.addProfileSetup(req.decodedToken.userId);
 
-        await profile.setup(req.body.university, hometown, speciality, work, workplace, s3PpPath, req.body.studentYear, req.decodedToken.profileId)
+    const interestedField = new InterestedField();
 
-        const user = new UserAuth()
+    await interestedField.save(userInterestedFields);
 
-        await user.addProfileSetup(req.decodedToken.userId)
+    let [[getProfileResult]] = await profile.getByPid(
+      req.decodedToken.profileId
+    );
 
-        const interestedField = new InterestedField()
+    const follower = new Follower();
 
-        await interestedField.save(userInterestedFields)
-                
-        let [[getProfileResult]] = await profile.getByPid(req.decodedToken.profileId)
+    let [[getFollowerCount]] = await follower.getFollowerCount(
+      getProfileResult.id
+    );
 
-        const follower = new Follower()
+    getProfileResult.followerCount = getFollowerCount.followerCount - 1;
 
-        let [[getFollowerCount]] = await follower.getFollowerCount(getProfileResult.id)
+    let [[getFollowingCount]] = await follower.getFollowingCount(
+      getProfileResult.id
+    );
 
-        getProfileResult.followerCount = getFollowerCount.followerCount - 1
+    getProfileResult.followingCount = getFollowingCount.followingCount - 1;
 
-        let [[getFollowingCount]] = await follower.getFollowingCount(getProfileResult.id)
-
-        getProfileResult.followingCount = getFollowingCount.followingCount - 1
-
-        return res.json({
-            status: 1,
-            details: getProfileResult
-        })
-
-    } catch (err) {
-        console.log(err)
-        err.status = 0
-        return next(err)
-    }
-
-}
+    return res.json({
+      status: 1,
+      details: getProfileResult,
+    });
+  } catch (err) {
+    console.log(err);
+    err.status = 0;
+    return next(err);
+  }
+};
